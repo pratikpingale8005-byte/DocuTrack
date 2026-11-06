@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuTrack - Terms & Conditions</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+  <main class="legal-page">
+    <a class="legal-brand" href="login.html"><span id="legalMark"></span>DocuTrack</a>
+    <h1>Terms & Conditions</h1>
+    <p>DocuTrack is a college project. It is not a commercial service, and these terms do not promise uptime, backup, or a security certification.</p>
+
+    <h2>Use</h2>
+    <p>Use the account created for this project. Do not upload a file unless you are allowed to store it and share it.</p>
+
+    <h2>What the actions do</h2>
+    <ul>
+      <li>Upload stores the file on the server. Uploading the same file name again creates the next version number on the server.</li>
+      <li>Delete marks your file as deleted. Restore clears that mark.</li>
+      <li>Share gives the user id you enter the permission you select.</li>
+      <li>A shared file with view permission cannot be downloaded. Download is allowed for download and edit permissions.</li>
+      <li>Transfer ownership changes the owner of the file to the user id you enter.</li>
+      <li>Run Retention Check applies the retention policy already stored for each expired file. That can flag the file, create a notification alert, or soft-delete it.</li>
+    </ul>
+
+    <h2>Information</h2>
+    <p>Counts on the dashboard come from the files, shares, and alerts returned for the logged-in user. They are not estimates.</p>
+
+    <div class="legal-links">
+      <a href="privacy.html">Privacy Policy</a>
+      <a href="login.html">Login</a>
+    </div>
+  </main>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>document.getElementById("legalMark").innerHTML = brandMark();</script>
+</body>
+</html>

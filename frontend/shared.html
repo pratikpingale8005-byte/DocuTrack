@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuTrack - Shared With Me</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <main class="main-content">
+      <header class="page-header" id="page-header"></header>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Files Shared With Me</h2>
+          <button type="button" class="btn btn-sm btn-outline" id="refreshBtn">Refresh</button>
+        </div>
+        <div id="sharedTable">Loading...</div>
+      </div>
+    </main>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      if (!requireAuthentication()) return;
+
+      initSidebar("shared");
+      initPageHeader("Shared With Me", "Files others have shared with you");
+      document.getElementById("refreshBtn").addEventListener("click", loadShared);
+      loadShared();
+    });
+
+    async function loadShared() {
+      renderLoading("sharedTable");
+      const result = await loadSharedFiles();
+
+      if (!result.success) {
+        document.getElementById("sharedTable").innerHTML = renderEmptyState(result.message || "Failed to load shared files");
+        return;
+      }
+
+      renderSharedTable(result.data.files || []);
+    }
+
+    document.getElementById("sharedTable").addEventListener("click", async (e) => {
+      const btn = e.target.closest('[data-action="download"]');
+      if (!btn) return;
+      await handleSharedDownload(Number(btn.dataset.fileId));
+    });
+
+    function renderSharedTable(files) {
+      const container = document.getElementById("sharedTable");
+
+      if (files.length === 0) {
+        container.innerHTML = renderEmptyState("No files have been shared with you yet");
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>File</th>
+                <th>Owner</th>
+                <th>Permission</th>
+                <th>Version</th>
+                <th>Size</th>
+                <th>Shared Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${files.map(f => {
+                const canDownload = f.permission_type === "download" || f.permission_type === "edit";
+                return `
+                  <tr>
+                    <td>
+                      <div class="file-name-cell">
+                        <span class="file-icon">${getFileIcon(f.category_id)}</span>
+                        ${escapeHtml(f.file_name)}
+                      </div>
+                    </td>
+                    <td>
+                      <div>${escapeHtml(f.shared_by_name)}</div>
+                      <div style="font-size:12px;color:var(--text-muted)">${escapeHtml(f.shared_by_email)}</div>
+                    </td>
+                    <td><span class="permission-badge">${escapeHtml(f.permission_type)}</span></td>
+                    <td>Version ${f.version_number || 1}</td>
+                    <td>${formatFileSize(f.file_size)}</td>
+                    <td>${formatDate(f.shared_at)}</td>
+                    <td>
+                      ${canDownload
+                        ? `<button class="btn btn-sm btn-primary" data-action="download" data-file-id="${f.file_id}">Download</button>`
+                        : `<span style="font-size:12px;color:var(--text-muted)">View only</span>`
+                      }
+                    </td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    async function handleSharedDownload(fileId) {
+      const result = await downloadSharedFile(fileId);
+      if (result.success) {
+        showToast("Download started", "success");
+      } else {
+        showToast(result.message, "error");
+      }
+    }
+  </script>
+</body>
+</html>

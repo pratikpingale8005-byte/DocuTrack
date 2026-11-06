@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuTrack - Profile</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <main class="main-content">
+      <header class="page-header" id="page-header"></header>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Account</h2>
+          </div>
+          <div id="profileDetails"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">My Summary</h2>
+          </div>
+          <div class="profile-summary" id="profileSummary">Loading...</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", async () => {
+      if (!requireAuthentication()) return;
+
+      initSidebar("profile");
+      initPageHeader("Profile", "Your DocuTrack account information");
+      renderProfileDetails();
+      await renderProfileSummary();
+    });
+
+    function renderProfileDetails() {
+      const user = getCurrentUser();
+      const container = document.getElementById("profileDetails");
+
+      container.innerHTML = `
+        <dl class="details-list">
+          <dt>User ID</dt><dd>${escapeHtml(user.user_id)}</dd>
+          <dt>Name</dt><dd>${escapeHtml(user.name)}</dd>
+          <dt>Email</dt><dd>${escapeHtml(user.email)}</dd>
+          <dt>Role</dt><dd>${escapeHtml(getRoleName(user.role_id))}</dd>
+          <dt>Department ID</dt><dd>${escapeHtml(user.department_id)}</dd>
+        </dl>
+        <button type="button" class="btn btn-danger profile-logout" id="profileLogout">Logout</button>
+      `;
+
+      document.getElementById("profileLogout").addEventListener("click", logout);
+    }
+
+    async function renderProfileSummary() {
+      const [filesResult, sharedResult, alertsResult] = await Promise.all([
+        loadMyFiles(),
+        loadSharedFiles(),
+        loadAlerts()
+      ]);
+
+      const files = filesResult.success ? (filesResult.data.files || []) : [];
+      const shared = sharedResult.success ? (sharedResult.data.files || []) : [];
+      const alerts = alertsResult.success ? (alertsResult.data.alerts || []) : [];
+      const active = files.filter((file) => !file.is_deleted);
+      const deleted = files.filter((file) => file.is_deleted);
+      const storageUsed = active.reduce((total, file) => total + Number(file.file_size || 0), 0);
+
+      document.getElementById("profileSummary").innerHTML = `
+        <div class="summary-row"><span>Active files</span><strong>${active.length}</strong></div>
+        <div class="summary-row"><span>Deleted files</span><strong>${deleted.length}</strong></div>
+        <div class="summary-row"><span>Shared with me</span><strong>${shared.length}</strong></div>
+        <div class="summary-row"><span>Open alerts</span><strong>${alerts.filter((alert) => !alert.is_resolved).length}</strong></div>
+        <div class="summary-row"><span>Current storage</span><strong>${formatFileSize(storageUsed)}</strong></div>
+      `;
+    }
+  </script>
+</body>
+</html>

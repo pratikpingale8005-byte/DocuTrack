@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuTrack - Alerts</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <main class="main-content">
+      <header class="page-header" id="page-header"></header>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Anomaly Alerts</h2>
+          <button type="button" class="btn btn-sm btn-outline" id="refreshBtn">Refresh</button>
+        </div>
+        <div id="alertsContent">Loading...</div>
+      </div>
+    </main>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      if (!requireAuthentication()) return;
+
+      initSidebar("alerts");
+      initPageHeader("Alerts", "Security and retention anomaly notifications");
+      document.getElementById("refreshBtn").addEventListener("click", loadAlertsPage);
+      loadAlertsPage();
+    });
+
+    async function loadAlertsPage() {
+      renderLoading("alertsContent");
+      const result = await loadAlerts();
+
+      if (!result.success) {
+        document.getElementById("alertsContent").innerHTML = renderEmptyState(result.message || "Failed to load alerts");
+        return;
+      }
+
+      renderAlerts(result.data.alerts || []);
+    }
+
+    function renderAlerts(alerts) {
+      const container = document.getElementById("alertsContent");
+
+      if (alerts.length === 0) {
+        container.innerHTML = renderEmptyState("No alerts at this time");
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="alert-list">
+          ${alerts.map(alert => `
+            <div class="alert-item ${alert.is_resolved ? "resolved" : ""}">
+              <div class="alert-content">
+                <div class="alert-type">${escapeHtml(alert.alert_type)}</div>
+                <div class="alert-details">${escapeHtml(alert.details || "-")}</div>
+                <div class="alert-time">Detected: ${formatDate(alert.detected_at)} · User: ${escapeHtml(alert.user_name)}</div>
+              </div>
+              <span class="status-badge ${alert.is_resolved ? "status-resolved" : "status-unresolved"}">
+                ${alert.is_resolved ? "Resolved" : "Unresolved"}
+              </span>
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>

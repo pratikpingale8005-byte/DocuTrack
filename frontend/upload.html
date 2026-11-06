@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuTrack - Upload</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <main class="main-content">
+      <header class="page-header" id="page-header"></header>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Upload File</h2>
+          <a href="files.html" class="btn btn-sm btn-outline">My Files</a>
+        </div>
+
+        <div class="upload-section upload-section-large">
+          <label class="upload-area" id="uploadArea">
+            <input type="file" id="fileInput">
+            <div class="upload-icon">Upload</div>
+            <div class="upload-text"><strong>Choose a file</strong> or drag and drop it here</div>
+            <div class="upload-hint" id="uploadHint">Maximum file size: 50 MB</div>
+          </label>
+          <div class="selected-file" id="selectedFile">No file selected</div>
+          <button type="button" class="btn btn-primary" id="uploadBtn" disabled>Upload</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Recent Uploads</h2>
+        </div>
+        <div id="recentUploads">Loading...</div>
+      </div>
+    </main>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    let selectedFile = null;
+
+    document.addEventListener("DOMContentLoaded", () => {
+      if (!requireAuthentication()) return;
+
+      initSidebar("upload");
+      initPageHeader("Upload", "Add documents and create new versions");
+      setupUploadPage();
+      loadRecentUploads();
+    });
+
+    function setupUploadPage() {
+      const fileInput = document.getElementById("fileInput");
+      const uploadBtn = document.getElementById("uploadBtn");
+      const uploadArea = document.getElementById("uploadArea");
+      const selectedFileEl = document.getElementById("selectedFile");
+
+      function setSelectedFile(file) {
+        selectedFile = file || null;
+        uploadBtn.disabled = !selectedFile;
+        selectedFileEl.textContent = selectedFile
+          ? `${selectedFile.name} (${formatFileSize(selectedFile.size)})`
+          : "No file selected";
+      }
+
+      fileInput.addEventListener("change", () => setSelectedFile(fileInput.files[0]));
+
+      uploadArea.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        uploadArea.classList.add("dragover");
+      });
+
+      uploadArea.addEventListener("dragleave", () => {
+        uploadArea.classList.remove("dragover");
+      });
+
+      uploadArea.addEventListener("drop", (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove("dragover");
+        if (e.dataTransfer.files.length) {
+          fileInput.files = e.dataTransfer.files;
+          setSelectedFile(e.dataTransfer.files[0]);
+        }
+      });
+
+      uploadBtn.addEventListener("click", async () => {
+        if (!selectedFile) return;
+
+        if (selectedFile.size > 50 * 1024 * 1024) {
+          showToast("File exceeds 50 MB limit", "error");
+          return;
+        }
+
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = "Uploading...";
+
+        const result = await uploadFile(selectedFile);
+
+        uploadBtn.textContent = "Upload";
+
+        if (result.success) {
+          showToast(result.message, "success");
+          fileInput.value = "";
+          setSelectedFile(null);
+          await loadRecentUploads();
+        } else {
+          showToast(result.message, "error");
+          uploadBtn.disabled = false;
+        }
+      });
+    }
+
+    async function loadRecentUploads() {
+      renderLoading("recentUploads");
+      const result = await loadMyFiles();
+
+      if (!result.success) {
+        document.getElementById("recentUploads").innerHTML = renderEmptyState(result.message || "Failed to load files");
+        return;
+      }
+
+      const files = (result.data.files || []).filter((file) => !file.is_deleted).slice(0, 5);
+      const container = document.getElementById("recentUploads");
+
+      if (files.length === 0) {
+        container.innerHTML = renderEmptyState("No uploads yet");
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr><th>File</th><th>Category</th><th>Version</th><th>Size</th><th>Modified</th></tr>
+            </thead>
+            <tbody>
+              ${files.map((file) => `
+                <tr>
+                  <td>
+                    <div class="file-name-cell">
+                      <span class="file-icon">${getFileIcon(file.category_id)}</span>
+                      ${escapeHtml(file.file_name)}
+                    </div>
+                  </td>
+                  <td>${escapeHtml(getCategoryName(file.category_id))}</td>
+                  <td>Version ${file.version_number || 1}</td>
+                  <td>${formatFileSize(file.file_size)}</td>
+                  <td>${formatDate(file.modified_at)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>

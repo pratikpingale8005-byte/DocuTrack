@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuTrack - Activity Logs</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <main class="main-content">
+      <header class="page-header" id="page-header"></header>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Activity Logs</h2>
+          <button type="button" class="btn btn-sm btn-outline" id="refreshBtn">Refresh</button>
+        </div>
+        <div id="activityContent">Loading...</div>
+      </div>
+    </main>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      if (!requireAuthentication()) return;
+
+      initSidebar("activity");
+      initPageHeader("Activity Logs", "Track all document actions and events");
+      document.getElementById("refreshBtn").addEventListener("click", loadActivity);
+      loadActivity();
+    });
+
+    async function loadActivity() {
+      renderLoading("activityContent");
+      const result = await loadActivityLogs();
+
+      if (!result.success) {
+        document.getElementById("activityContent").innerHTML = renderEmptyState(result.message || "Failed to load activity logs");
+        return;
+      }
+
+      renderActivity(result.data.logs || []);
+    }
+
+    function renderActivity(logs) {
+      const container = document.getElementById("activityContent");
+
+      if (logs.length === 0) {
+        container.innerHTML = renderEmptyState("No activity recorded yet");
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Action</th>
+                <th>File</th>
+                <th>User</th>
+                <th>Details</th>
+                <th>Date/Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${logs.map(log => `
+                <tr>
+                  <td><strong>${escapeHtml(log.action)}</strong></td>
+                  <td>${escapeHtml(log.file_name || "-")}</td>
+                  <td>${escapeHtml(log.user_name)}</td>
+                  <td>${escapeHtml(log.details || "-")}</td>
+                  <td>${formatDate(log.action_timestamp)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>

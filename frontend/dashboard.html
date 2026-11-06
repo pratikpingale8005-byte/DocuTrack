@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuTrack - Dashboard</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <main class="main-content">
+      <header class="page-header" id="page-header"></header>
+
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card"><div class="stat-label">Total Files</div><div class="stat-value" id="statTotal">-</div></div>
+        <div class="stat-card stat-success"><div class="stat-label">Active Files</div><div class="stat-value" id="statActive">-</div></div>
+        <div class="stat-card stat-danger"><div class="stat-label">Deleted Files</div><div class="stat-value" id="statDeleted">-</div></div>
+        <div class="stat-card stat-info"><div class="stat-label">Shared With Me</div><div class="stat-value" id="statShared">-</div></div>
+        <div class="stat-card stat-warning"><div class="stat-label">Alerts</div><div class="stat-value" id="statAlerts">-</div></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Recent Files</h2>
+            <a href="files.html" class="btn btn-sm btn-outline">View All</a>
+          </div>
+          <div id="recentFiles">Loading...</div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Recent Activity</h2>
+            <a href="activity.html" class="btn btn-sm btn-outline">View All</a>
+          </div>
+          <div id="recentActivity">Loading...</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Recent Alerts</h2>
+          <a href="alerts.html" class="btn btn-sm btn-outline">View All</a>
+        </div>
+        <div id="recentAlerts">Loading...</div>
+      </div>
+
+      <div class="card" id="adminRetentionCard" style="display:none;">
+        <div class="card-header">
+          <h2 class="card-title">Admin Actions</h2>
+        </div>
+        <p style="font-size:14px;color:var(--text-muted);margin-bottom:16px;">
+          Run the retention policy check to process expired files according to configured policies.
+        </p>
+        <button type="button" class="btn btn-primary" id="retentionBtn">Run Retention Check</button>
+        <div id="retentionResult"></div>
+      </div>
+    </main>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", async () => {
+      if (!requireAuthentication()) return;
+
+      initSidebar("dashboard");
+      initPageHeader("Dashboard", "Overview of your documents and activity");
+
+      if (isAdmin()) {
+        document.getElementById("adminRetentionCard").style.display = "block";
+        document.getElementById("retentionBtn").addEventListener("click", handleRetentionCheck);
+      }
+
+      await loadDashboard();
+    });
+
+    async function loadDashboard() {
+      const [filesResult, sharedResult, alertsResult, activityResult] = await Promise.all([
+        loadMyFiles(),
+        loadSharedFiles(),
+        loadAlerts(),
+        loadActivityLogs()
+      ]);
+
+      const files = filesResult.success ? (filesResult.data.files || []) : [];
+      const shared = sharedResult.success ? (sharedResult.data.files || []) : [];
+      const alerts = alertsResult.success ? (alertsResult.data.alerts || []) : [];
+      const logs = activityResult.success ? (activityResult.data.logs || []) : [];
+
+      const active = files.filter(f => !f.is_deleted);
+      const deleted = files.filter(f => f.is_deleted);
+      const unresolvedAlerts = alerts.filter(a => !a.is_resolved);
+
+      document.getElementById("statTotal").textContent = files.length;
+      document.getElementById("statActive").textContent = active.length;
+      document.getElementById("statDeleted").textContent = deleted.length;
+      document.getElementById("statShared").textContent = shared.length;
+      document.getElementById("statAlerts").textContent = unresolvedAlerts.length;
+
+      renderRecentFiles(active.slice(0, 5));
+      renderRecentActivity(logs.slice(0, 5));
+      renderRecentAlerts(alerts.slice(0, 4));
+    }
+
+    function renderRecentFiles(files) {
+      const container = document.getElementById("recentFiles");
+
+      if (files.length === 0) {
+        container.innerHTML = renderEmptyState("No files uploaded yet");
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr><th>File</th><th>Version</th><th>Size</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              ${files.map(f => `
+                <tr>
+                  <td>
+                    <div class="file-name-cell">
+                      <span class="file-icon">${getFileIcon(f.category_id)}</span>
+                      ${escapeHtml(f.file_name)}
+                    </div>
+                  </td>
+                  <td>v${f.version_number || 1}</td>
+                  <td>${formatFileSize(f.file_size)}</td>
+                  <td>${renderStatusBadge(f.is_deleted)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderRecentActivity(logs) {
+      const container = document.getElementById("recentActivity");
+
+      if (logs.length === 0) {
+        container.innerHTML = renderEmptyState("No activity recorded yet");
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="timeline">
+          ${logs.map(log => `
+            <div class="timeline-item">
+              <div class="timeline-action">${escapeHtml(log.action)}</div>
+              <div class="timeline-meta">${escapeHtml(log.file_name || "-")} · ${formatDate(log.action_timestamp)}</div>
+              ${log.details ? `<div class="timeline-details">${escapeHtml(log.details)}</div>` : ""}
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function renderRecentAlerts(alerts) {
+      const container = document.getElementById("recentAlerts");
+
+      if (alerts.length === 0) {
+        container.innerHTML = renderEmptyState("No alerts at this time");
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="alert-list">
+          ${alerts.map(alert => `
+            <div class="alert-item ${alert.is_resolved ? "resolved" : ""}">
+              <div class="alert-content">
+                <div class="alert-type">${escapeHtml(alert.alert_type)}</div>
+                <div class="alert-details">${escapeHtml(alert.details || "-")}</div>
+                <div class="alert-time">${formatDate(alert.detected_at)}</div>
+              </div>
+              <span class="status-badge ${alert.is_resolved ? "status-resolved" : "status-unresolved"}">
+                ${alert.is_resolved ? "Resolved" : "Unresolved"}
+              </span>
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    async function handleRetentionCheck() {
+      const btn = document.getElementById("retentionBtn");
+      const resultEl = document.getElementById("retentionResult");
+
+      btn.disabled = true;
+      btn.textContent = "Running...";
+      resultEl.innerHTML = "";
+
+      const result = await runRetentionCheck();
+
+      btn.disabled = false;
+      btn.textContent = "Run Retention Check";
+
+      if (result.success) {
+        const d = result.data;
+        showToast(d.message || "Retention check completed", "success");
+        resultEl.innerHTML = `
+          <div class="retention-result">
+            <dl>
+              <dt>Expired Files Found</dt><dd>${d.expired_files_found ?? 0}</dd>
+              <dt>Flagged</dt><dd>${d.flagged ?? 0}</dd>
+              <dt>Soft Deleted</dt><dd>${d.soft_deleted ?? 0}</dd>
+              <dt>Notified</dt><dd>${d.notified ?? 0}</dd>
+            </dl>
+          </div>
+        `;
+        await loadDashboard();
+      } else {
+        showToast(result.message || result.data?.message || "Retention check failed", "error");
+      }
+    }
+  </script>
+</body>
+</html>

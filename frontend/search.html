@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuTrack - Search</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <main class="main-content">
+      <header class="page-header" id="page-header"></header>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Search Files</h2>
+          <button type="button" class="btn btn-sm btn-outline" id="refreshBtn">Refresh</button>
+        </div>
+
+        <div class="search-controls">
+          <div class="form-group search-input-group">
+            <label for="searchInput">Keyword</label>
+            <input type="search" id="searchInput" placeholder="Search by file name, category, owner, or permission">
+          </div>
+          <div class="form-group">
+            <label for="sourceFilter">Source</label>
+            <select id="sourceFilter">
+              <option value="all">All files</option>
+              <option value="mine">My files</option>
+              <option value="shared">Shared with me</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="statusFilter">Status</label>
+            <select id="statusFilter">
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="deleted">Deleted</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="searchResults">Loading...</div>
+      </div>
+    </main>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    let allSearchFiles = [];
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      if (!requireAuthentication()) return;
+
+      initSidebar("search");
+      initPageHeader("Search", "Find owned and shared documents");
+
+      document.getElementById("searchInput").addEventListener("input", renderSearchResults);
+      document.getElementById("sourceFilter").addEventListener("change", renderSearchResults);
+      document.getElementById("statusFilter").addEventListener("change", renderSearchResults);
+      document.getElementById("refreshBtn").addEventListener("click", loadSearchData);
+
+      await loadSearchData();
+    });
+
+    async function loadSearchData() {
+      renderLoading("searchResults");
+
+      const [myFilesResult, sharedFilesResult] = await Promise.all([
+        loadMyFiles(),
+        loadSharedFiles()
+      ]);
+
+      if (!myFilesResult.success || !sharedFilesResult.success) {
+        document.getElementById("searchResults").innerHTML = renderEmptyState("Failed to load searchable files");
+        return;
+      }
+
+      const myFiles = (myFilesResult.data.files || []).map((file) => ({
+        ...file,
+        source: "mine",
+        source_label: "My file",
+        owner_name: getCurrentUser()?.name || "Me",
+        permission_type: "owner"
+      }));
+
+      const sharedFiles = (sharedFilesResult.data.files || []).map((file) => ({
+        ...file,
+        category_id: file.category_id || 7,
+        is_deleted: false,
+        source: "shared",
+        source_label: "Shared",
+        owner_name: file.shared_by_name
+      }));
+
+      allSearchFiles = [...myFiles, ...sharedFiles];
+      renderSearchResults();
+    }
+
+    function renderSearchResults() {
+      const query = document.getElementById("searchInput").value.trim().toLowerCase();
+      const sourceFilter = document.getElementById("sourceFilter").value;
+      const statusFilter = document.getElementById("statusFilter").value;
+
+      const files = allSearchFiles.filter((file) => {
+        const text = [
+          file.file_name,
+          getCategoryName(file.category_id),
+          file.owner_name,
+          file.permission_type,
+          file.source_label
+        ].join(" ").toLowerCase();
+
+        const matchesQuery = !query || text.includes(query);
+        const matchesSource = sourceFilter === "all" || file.source === sourceFilter;
+        const matchesStatus =
+          statusFilter === "all" ||
+          (statusFilter === "active" && !file.is_deleted) ||
+          (statusFilter === "deleted" && file.is_deleted);
+
+        return matchesQuery && matchesSource && matchesStatus;
+      });
+
+      const container = document.getElementById("searchResults");
+
+      if (files.length === 0) {
+        container.innerHTML = renderEmptyState("No matching files found");
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="result-count">${files.length} result${files.length === 1 ? "" : "s"}</div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>File</th>
+                <th>Source</th>
+                <th>Owner</th>
+                <th>Category</th>
+                <th>Status</th>
+                <th>Version</th>
+                <th>Size</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${files.map((file) => `
+                <tr class="${file.is_deleted ? "row-deleted" : ""}">
+                  <td>
+                    <div class="file-name-cell">
+                      <span class="file-icon">${getFileIcon(file.category_id)}</span>
+                      ${escapeHtml(file.file_name)}
+                    </div>
+                  </td>
+                  <td><span class="permission-badge">${escapeHtml(file.source_label)}</span></td>
+                  <td>${escapeHtml(file.owner_name || "-")}</td>
+                  <td>${escapeHtml(getCategoryName(file.category_id))}</td>
+                  <td>${renderStatusBadge(file.is_deleted)}</td>
+                  <td>Version ${file.version_number || 1}</td>
+                  <td>${formatFileSize(file.file_size)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>

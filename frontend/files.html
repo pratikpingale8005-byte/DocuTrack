@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuTrack - My Files</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <main class="main-content">
+      <header class="page-header" id="page-header"></header>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Upload File</h2>
+        </div>
+        <div class="upload-section">
+          <label class="upload-area" id="uploadArea">
+            <input type="file" id="fileInput">
+            <div class="upload-text"><strong>Click to upload</strong> or drag and drop</div>
+            <div class="upload-hint">Maximum file size: 50 MB</div>
+          </label>
+          <button type="button" class="btn btn-primary" id="uploadBtn" disabled>Upload</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">My Files</h2>
+          <button type="button" class="btn btn-sm btn-outline" id="refreshBtn">Refresh</button>
+        </div>
+        <div id="filesTable">Loading...</div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Share Modal -->
+  <div class="modal" id="shareModal">
+    <div class="modal-content">
+      <button type="button" class="close-btn" data-close-modal>&times;</button>
+      <div class="modal-header">Share File</div>
+      <div class="modal-body">
+        <div class="modal-file-name" id="shareFileName"></div>
+        <div class="form-group">
+          <label for="shareUserId">User ID</label>
+          <input type="number" id="shareUserId" min="1" placeholder="Enter user ID to share with">
+        </div>
+        <div class="form-group">
+          <label for="sharePermission">Permission</label>
+          <select id="sharePermission">
+            <option value="view">View</option>
+            <option value="edit">Edit</option>
+            <option value="download">Download</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
+        <button type="button" class="btn btn-primary" id="confirmShareBtn">Share</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Transfer Ownership Modal -->
+  <div class="modal" id="transferModal">
+    <div class="modal-content">
+      <button type="button" class="close-btn" data-close-modal>&times;</button>
+      <div class="modal-header">Transfer Ownership</div>
+      <div class="modal-body">
+        <div class="modal-file-name" id="transferFileName"></div>
+        <div class="form-group">
+          <label for="transferUserId">New Owner ID</label>
+          <input type="number" id="transferUserId" min="1" placeholder="Enter new owner user ID">
+        </div>
+        <div class="form-group">
+          <label for="transferReason">Reason</label>
+          <textarea id="transferReason" placeholder="Reason for ownership transfer"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirmTransferBtn">Transfer Ownership</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tags Modal -->
+  <div class="modal" id="tagsModal">
+    <div class="modal-content">
+      <button type="button" class="close-btn" data-close-modal>&times;</button>
+      <div class="modal-header">Manage Tags</div>
+      <div class="modal-body">
+        <div class="modal-file-name" id="tagsFileName"></div>
+
+        <div class="tag-list" id="currentTags">
+          Loading...
+        </div>
+
+        <div class="form-group">
+          <label for="existingTagSelect">Add Existing Tag</label>
+          <select id="existingTagSelect">
+            <option value="">Select a tag</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="newTagName">Create New Tag</label>
+          <input type="text" id="newTagName" maxlength="50" placeholder="Example: Assignment">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close-modal>Close</button>
+        <button type="button" class="btn btn-primary" id="addExistingTagBtn">Add Selected</button>
+        <button type="button" class="btn btn-success" id="createAndAddTagBtn">Create & Add</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    let selectedFile = null;
+    let currentShareFileId = null;
+    let currentTransferFileId = null;
+    let currentTagFileId = null;
+    let filesCache = [];
+    let allTags = [];
+    let fileTagsByFile = {};
+
+    document.addEventListener("DOMContentLoaded", () => {
+      if (!requireAuthentication()) return;
+
+      initSidebar("files");
+      initPageHeader("My Files", "Upload, manage, and share your documents");
+      initModals();
+      setupUpload();
+      setupModals();
+      setupTagModal();
+
+      document.getElementById("refreshBtn").addEventListener("click", loadFiles);
+      loadFiles();
+    });
+
+    function setupUpload() {
+      const fileInput = document.getElementById("fileInput");
+      const uploadBtn = document.getElementById("uploadBtn");
+      const uploadArea = document.getElementById("uploadArea");
+
+      fileInput.addEventListener("change", () => {
+        selectedFile = fileInput.files[0] || null;
+        uploadBtn.disabled = !selectedFile;
+      });
+
+      uploadArea.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        uploadArea.classList.add("dragover");
+      });
+
+      uploadArea.addEventListener("dragleave", () => {
+        uploadArea.classList.remove("dragover");
+      });
+
+      uploadArea.addEventListener("drop", (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove("dragover");
+        if (e.dataTransfer.files.length) {
+          fileInput.files = e.dataTransfer.files;
+          selectedFile = e.dataTransfer.files[0];
+          uploadBtn.disabled = false;
+        }
+      });
+
+      uploadBtn.addEventListener("click", async () => {
+        if (!selectedFile) return;
+
+        if (selectedFile.size > 50 * 1024 * 1024) {
+          showToast("File exceeds 50 MB limit", "error");
+          return;
+        }
+
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = "Uploading...";
+
+        const result = await uploadFile(selectedFile);
+
+        uploadBtn.textContent = "Upload";
+        uploadBtn.disabled = !selectedFile;
+
+        if (result.success) {
+          showToast(result.message, "success");
+          fileInput.value = "";
+          selectedFile = null;
+          uploadBtn.disabled = true;
+          loadFiles();
+        } else {
+          showToast(result.message, "error");
+        }
+      });
+    }
+
+    function setupModals() {
+      document.getElementById("confirmShareBtn").addEventListener("click", async () => {
+        const userId = document.getElementById("shareUserId").value;
+        const permission = document.getElementById("sharePermission").value;
+
+        if (!userId) {
+          showToast("Please enter a user ID", "error");
+          return;
+        }
+
+        const btn = document.getElementById("confirmShareBtn");
+        btn.disabled = true;
+
+        const result = await shareFile(currentShareFileId, userId, permission);
+
+        btn.disabled = false;
+
+        if (result.success) {
+          showToast(result.data.message || "File shared successfully", "success");
+          closeModal("shareModal");
+          document.getElementById("shareUserId").value = "";
+        } else {
+          showToast(result.data?.message || result.message || "Share failed", "error");
+        }
+      });
+
+      document.getElementById("confirmTransferBtn").addEventListener("click", async () => {
+        const userId = document.getElementById("transferUserId").value;
+        const reason = document.getElementById("transferReason").value.trim();
+
+        if (!userId) {
+          showToast("Please enter a new owner ID", "error");
+          return;
+        }
+
+        if (!confirm("Are you sure you want to transfer ownership of this file? This action cannot be undone.")) {
+          return;
+        }
+
+        const btn = document.getElementById("confirmTransferBtn");
+        btn.disabled = true;
+
+        const result = await transferOwnership(currentTransferFileId, userId, reason);
+
+        btn.disabled = false;
+
+        if (result.success) {
+          showToast(result.data.message || "Ownership transferred", "success");
+          closeModal("transferModal");
+          document.getElementById("transferUserId").value = "";
+          document.getElementById("transferReason").value = "";
+          loadFiles();
+        } else {
+          showToast(result.data?.message || result.message || "Transfer failed", "error");
+        }
+      });
+    }
+
+    document.getElementById("filesTable").addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-action]");
+      if (!btn) return;
+
+      const row = btn.closest("tr");
+      const fileId = Number(row.dataset.fileId);
+      const file = filesCache.find(f => Number(f.file_id) === fileId);
+      const fileName = file ? file.file_name : "this file";
+      const action = btn.dataset.action;
+
+      if (action === "download") await handleDownload(fileId);
+      else if (action === "share") openShareModal(fileId, fileName);
+      else if (action === "transfer") openTransferModal(fileId, fileName);
+      else if (action === "tags") openTagsModal(fileId, fileName);
+      else if (action === "delete") await handleDelete(fileId, fileName);
+      else if (action === "restore") await handleRestore(fileId);
+    });
+
+    async function loadTagsForFiles(files) {
+      fileTagsByFile = {};
+
+      await Promise.all(files.map(async (file) => {
+        const result = await loadFileTags(file.file_id);
+        fileTagsByFile[file.file_id] = result.success ? (result.data.tags || []) : [];
+      }));
+    }
+
+    async function loadFiles() {
+      renderLoading("filesTable");
+      const result = await loadMyFiles();
+
+      if (!result.success) {
+        document.getElementById("filesTable").innerHTML = renderEmptyState(result.message || "Failed to load files");
+        return;
+      }
+
+      const files = result.data.files || [];
+      filesCache = files;
+      await loadTagsForFiles(files);
+      renderFilesTable(files);
+    }
+
+    function renderFileTags(fileId) {
+      const tags = fileTagsByFile[fileId] || [];
+
+      if (tags.length === 0) {
+        return '<span class="tag-empty">No tags</span>';
+      }
+
+      return `
+        <div class="tag-pills">
+          ${tags.map(tag => `
+            <span class="tag-pill">${escapeHtml(tag.tag_name)}</span>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function renderFilesTable(files) {
+      filesCache = files;
+      const container = document.getElementById("filesTable");
+
+      if (files.length === 0) {
+        container.innerHTML = renderEmptyState("No files yet. Upload your first document!");
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>File</th>
+                <th>Category</th>
+                <th>Version</th>
+                <th>Size</th>
+                <th>Status</th>
+                <th>Tags</th>
+                <th>Created</th>
+                <th>Modified</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${files.map(f => `
+                <tr class="${f.is_deleted ? "row-deleted" : ""}" data-file-id="${f.file_id}">
+                  <td>
+                    <div class="file-name-cell">
+                      <span class="file-icon">${getFileIcon(f.category_id)}</span>
+                      ${escapeHtml(f.file_name)}
+                    </div>
+                  </td>
+                  <td>${escapeHtml(getCategoryName(f.category_id))}</td>
+                  <td>Version ${f.version_number || 1}</td>
+                  <td>${formatFileSize(f.file_size)}</td>
+                  <td>${renderStatusBadge(f.is_deleted)}</td>
+                  <td>${renderFileTags(f.file_id)}</td>
+                  <td>${formatDate(f.created_at)}</td>
+                  <td>${formatDate(f.modified_at)}</td>
+                  <td>
+                    <div class="btn-group">
+                      ${!f.is_deleted ? `
+                        <button class="btn btn-sm btn-primary" data-action="download">Download</button>
+                        <button class="btn btn-sm btn-success" data-action="share">Share</button>
+                        <button class="btn btn-sm btn-outline" data-action="tags">Tags</button>
+                        <button class="btn btn-sm btn-secondary" data-action="transfer">Transfer</button>
+                        <button class="btn btn-sm btn-danger" data-action="delete">Delete</button>
+                      ` : `
+                        <button class="btn btn-sm btn-success" data-action="restore">Restore</button>
+                      `}
+                    </div>
+                  </td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    async function handleDownload(fileId) {
+      const result = await downloadFile(fileId);
+      if (result.success) {
+        showToast("Download started", "success");
+      } else {
+        showToast(result.message, "error");
+      }
+    }
+
+    async function handleDelete(fileId, fileName) {
+      if (!confirm(`Are you sure you want to delete "${fileName}"?`)) return;
+
+      const result = await deleteFile(fileId);
+      if (result.success) {
+        showToast(result.data.message || "File deleted", "success");
+        loadFiles();
+      } else {
+        showToast(result.data?.message || result.message || "Delete failed", "error");
+      }
+    }
+
+    async function handleRestore(fileId) {
+      const result = await restoreFile(fileId);
+      if (result.success) {
+        showToast(result.data.message || "File restored", "success");
+        loadFiles();
+      } else {
+        showToast(result.data?.message || result.message || "Restore failed", "error");
+      }
+    }
+
+    function openShareModal(fileId, fileName) {
+      currentShareFileId = fileId;
+      document.getElementById("shareFileName").textContent = fileName;
+      document.getElementById("shareUserId").value = "";
+      openModal("shareModal");
+    }
+
+    function openTransferModal(fileId, fileName) {
+      currentTransferFileId = fileId;
+      document.getElementById("transferFileName").textContent = fileName;
+      document.getElementById("transferUserId").value = "";
+      document.getElementById("transferReason").value = "";
+      openModal("transferModal");
+    }
+
+    function setupTagModal() {
+      document.getElementById("addExistingTagBtn").addEventListener("click", addSelectedTag);
+      document.getElementById("createAndAddTagBtn").addEventListener("click", createAndAddTag);
+
+      document.getElementById("currentTags").addEventListener("click", async (e) => {
+        const btn = e.target.closest("[data-remove-tag]");
+        if (!btn || !currentTagFileId) return;
+
+        const result = await removeTagFromFile(currentTagFileId, btn.dataset.removeTag);
+
+        if (result.success) {
+          showToast(result.data.message || "Tag removed", "success");
+          await refreshCurrentFileTags();
+        } else {
+          showToast(result.data?.message || result.message || "Failed to remove tag", "error");
+        }
+      });
+    }
+
+    async function openTagsModal(fileId, fileName) {
+      currentTagFileId = fileId;
+      document.getElementById("tagsFileName").textContent = fileName;
+      document.getElementById("newTagName").value = "";
+      document.getElementById("currentTags").textContent = "Loading...";
+      openModal("tagsModal");
+
+      await refreshAllTags();
+      await refreshCurrentFileTags();
+    }
+
+    async function refreshAllTags() {
+      const result = await loadTags();
+
+      if (!result.success) {
+        showToast(result.data?.message || result.message || "Failed to load tags", "error");
+        return;
+      }
+
+      allTags = result.data.tags || [];
+      renderTagSelect();
+    }
+
+    async function refreshCurrentFileTags() {
+      if (!currentTagFileId) return;
+
+      const result = await loadFileTags(currentTagFileId);
+
+      if (!result.success) {
+        document.getElementById("currentTags").innerHTML = '<span class="tag-empty">Unable to load tags</span>';
+        showToast(result.data?.message || result.message || "Failed to load file tags", "error");
+        return;
+      }
+
+      fileTagsByFile[currentTagFileId] = result.data.tags || [];
+      renderCurrentTags();
+      renderFilesTable(filesCache);
+    }
+
+    function renderTagSelect() {
+      const select = document.getElementById("existingTagSelect");
+      select.innerHTML = '<option value="">Select a tag</option>';
+
+      allTags.forEach((tag) => {
+        const option = document.createElement("option");
+        option.value = tag.tag_id;
+        option.textContent = tag.tag_name;
+        select.appendChild(option);
+      });
+    }
+
+    function renderCurrentTags() {
+      const tags = fileTagsByFile[currentTagFileId] || [];
+      const container = document.getElementById("currentTags");
+
+      if (tags.length === 0) {
+        container.innerHTML = '<span class="tag-empty">No tags assigned</span>';
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="tag-pills">
+          ${tags.map((tag) => `
+            <span class="tag-pill tag-pill-removable">
+              ${escapeHtml(tag.tag_name)}
+              <button type="button" data-remove-tag="${tag.tag_id}" aria-label="Remove ${escapeHtml(tag.tag_name)}">&times;</button>
+            </span>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    async function addSelectedTag() {
+      const tagId = document.getElementById("existingTagSelect").value;
+
+      if (!tagId) {
+        showToast("Please select a tag", "error");
+        return;
+      }
+
+      const result = await addTagToFile(currentTagFileId, tagId);
+
+      if (result.success) {
+        showToast(result.data.message || "Tag added", "success");
+        document.getElementById("existingTagSelect").value = "";
+        await refreshCurrentFileTags();
+      } else {
+        showToast(result.data?.message || result.message || "Failed to add tag", "error");
+      }
+    }
+
+    async function createAndAddTag() {
+      const tagNameInput = document.getElementById("newTagName");
+      const tagName = tagNameInput.value.trim();
+
+      if (!tagName) {
+        showToast("Please enter a tag name", "error");
+        return;
+      }
+
+      const createResult = await createTag(tagName);
+      let tag = createResult.data?.tag;
+
+      if (!createResult.success && createResult.status !== 409) {
+        showToast(createResult.data?.message || createResult.message || "Failed to create tag", "error");
+        return;
+      }
+
+      if (!tag) {
+        showToast(createResult.data?.message || "Tag already exists", "error");
+        await refreshAllTags();
+        return;
+      }
+
+      const addResult = await addTagToFile(currentTagFileId, tag.tag_id);
+
+      if (addResult.success) {
+        showToast(addResult.data.message || "Tag added", "success");
+        tagNameInput.value = "";
+        await refreshAllTags();
+        await refreshCurrentFileTags();
+      } else {
+        showToast(addResult.data?.message || addResult.message || "Failed to add tag", "error");
+      }
+    }
+  </script>
+</body>
+</html>

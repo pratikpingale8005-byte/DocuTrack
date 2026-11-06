@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuTrack - Privacy Policy</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+  <main class="legal-page">
+    <a class="legal-brand" href="login.html"><span id="legalMark"></span>DocuTrack</a>
+    <h1>Privacy Policy</h1>
+    <p>DocuTrack is a college project for storing and sharing documents. This page describes the data this project actually handles.</p>
+
+    <h2>Account</h2>
+    <p>Login sends your email and password to the DocuTrack server. The database stores the password as a hash. The server does not return the password.</p>
+    <p>A successful login returns a token and these fields: user id, name, email, role id, and department id. The browser stores the token and that user record in localStorage. The token expires after 1 hour.</p>
+    <p>Logout removes the token and user record from localStorage on this browser.</p>
+
+    <h2>Files</h2>
+    <p>Uploaded files are saved on the computer running the backend. The database stores the file name, extension, category, version, size, hash, owner, and timestamps.</p>
+    <p>Sharing stores the user id you enter and the permission you select: view, edit, or download.</p>
+
+    <h2>Activity and alerts</h2>
+    <p>Activity logs and alerts shown in the app are the records stored for the logged-in user.</p>
+
+    <h2>What this project does not do</h2>
+    <p>The frontend does not send data to a separate analytics service. This page does not claim compliance with a named privacy law.</p>
+
+    <h2>What you should know</h2>
+    <ul>
+      <li>JavaScript on this site can read the token stored in localStorage.</li>
+      <li>Files remain on the backend machine until the project data is deleted there.</li>
+      <li>A retention check can soft-delete a file or create an alert when that file's stored policy says to do so.</li>
+    </ul>
+
+    <div class="legal-links">
+      <a href="terms.html">Terms & Conditions</a>
+      <a href="login.html">Login</a>
+    </div>
+  </main>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>document.getElementById("legalMark").innerHTML = brandMark();</script>
+</body>
+</html>
